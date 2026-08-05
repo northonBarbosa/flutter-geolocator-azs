@@ -161,31 +161,6 @@ The second key (in this example called `YourPurposeKey`) should match the purpos
 > NOTE: the first time requesting temporary full accuracy access it might take several seconds for the pop-up to show. This is due to the fact that macOS is determining the exact user location which may take several seconds. Unfortunately this is out of our hands.
 </details>
 
-<details>
-<summary>Web</summary>
-
-To use the Geolocator plugin on the web you need to be using Flutter 1.20 or higher. Flutter will automatically add the endorsed [geolocator_web]() package to your application when you add the `geolocator: ^6.2.0` dependency to your `pubspec.yaml`.
-
-The following methods of the geolocator API are not supported on the web and will result in a `UnsupportedError`:
-
-- `getLastKnownPosition({ bool forceAndroidLocationManager = true })`
-- `openAppSettings()`
-- `openLocationSettings()`
-- `getServiceStatusStream()`
-
-**NOTE**
-
-Geolocator Web is available only in [secure_contexts](https://developer.mozilla.org/en-US/docs/Web/Security/Secure_Contexts) (HTTPS). More info about the Geolocator API can be found [here](https://developer.mozilla.org/en-US/docs/Web/API/Geolocation_API).
-
-</details>
-
-<details>
-<summary>Windows</summary>
-
-To use the Geolocator plugin on Windows you need to be using Flutter 2.10 or higher. Flutter will automatically add the endorsed [geolocator_windows]() package to your application when you add the `geolocator: ^8.1.0` dependency to your `pubspec.yaml`.
-
-</details>
-
 ### Example
 
 The code below shows an example on how to acquire the current position of the device, including checking if the location services are enabled and checking / requesting permission to access the position of the device:
@@ -290,12 +265,11 @@ StreamSubscription<Position> positionStream = Geolocator.getPositionStream(locat
 
 ### Platform specific location settings
 
-In certain situation it is necessary to specify some platform specific settings. This can be accomplished using the platform specific `AndroidSettings`, `AppleSettings` and `WebSettings` classes. When using a platform specific class, the platform specific package must be imported as well. For example:
+In certain situation it is necessary to specify some platform specific settings. This can be accomplished using the platform specific `AndroidSettings` and `AppleSettings` classes. When using a platform specific class, the platform specific package must be imported as well. For example:
 
 ```dart
 import 'package:geolocator/geolocator.dart';
 import 'package:geolocator_android/geolocator_android.dart';
-import 'package:geolocator_android/geolocator_web.dart';
 import 'package:geolocator_apple/geolocator_apple.dart';
 
 late LocationSettings locationSettings;
@@ -323,12 +297,6 @@ if (defaultTargetPlatform == TargetPlatform.android) {
     pauseLocationUpdatesAutomatically: true,
     // Only set to true if our app will be started up in the background.
     showBackgroundLocationIndicator: false,
-  );
-} else if (kIsWeb) {
-  locationSettings = WebSettings(
-    accuracy: LocationAccuracy.high,
-    distanceFilter: 100,
-    maximumAge: Duration(minutes: 5),
   );
 } else {
   locationSettings = LocationSettings(
@@ -381,8 +349,6 @@ StreamSubscription<ServiceStatus> serviceStatusStream = Geolocator.getServiceSta
 ```
 
 ### Permissions
-
-When using the web platform, the `checkPermission` method will return the `LocationPermission.denied` status, when the browser doesn't support the JavaScript Permissions API. Nevertheless, the `getCurrentPosition` and `getPositionStream` methods can still be used on the web platform.
 
 If you want to check if the user already granted permissions to acquire the device's location you can make a call to the `checkPermission` method:
 

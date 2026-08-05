@@ -13,7 +13,6 @@ export 'package:geolocator_android/geolocator_android.dart'
         AndroidPosition;
 export 'package:geolocator_apple/geolocator_apple.dart'
     show AppleSettings, ActivityType;
-export 'package:geolocator_web/web_settings.dart' show WebSettings;
 export 'package:geolocator_platform_interface/geolocator_platform_interface.dart';
 
 /// Wraps CLLocationManager (on iOS) and FusedLocationProviderClient or
@@ -74,7 +73,7 @@ class Geolocator {
   /// [TimeoutException] will be thrown. By default no time limit is configured.
   ///
   /// If you want to specify platform specific settings you can use the
-  /// [AndroidSettings], [AppleSettings] and [WebSettings] classes.
+  /// [AndroidSettings] and [AppleSettings] classes.
   ///
   /// You can control the precision of the location updates by supplying the
   /// [desiredAccuracy] parameter (defaults to "best").
@@ -119,13 +118,13 @@ class Geolocator {
   static Future<Position> getCurrentPosition({
     LocationSettings? locationSettings,
     @Deprecated(
-        "use settings parameter with AndroidSettings, AppleSettings, WebSettings, or LocationSettings")
+        "use settings parameter with AndroidSettings, AppleSettings, or LocationSettings")
     LocationAccuracy desiredAccuracy = LocationAccuracy.best,
     @Deprecated(
-        "use settings parameter with AndroidSettings, AppleSettings, WebSettings, or LocationSettings")
+        "use settings parameter with AndroidSettings, AppleSettings, or LocationSettings")
     bool forceAndroidLocationManager = false,
     @Deprecated(
-        "use settings parameter with AndroidSettings, AppleSettings, WebSettings, or LocationSettings")
+        "use settings parameter with AndroidSettings, AppleSettings, or LocationSettings")
     Duration? timeLimit,
   }) {
     LocationSettings? settings;
@@ -179,7 +178,7 @@ class Geolocator {
   /// [TimeoutException] will be thrown. By default no time limit is configured.
   ///
   /// If you want to specify platform specific settings you can use the
-  /// [AndroidSettings], [AppleSettings] and [WebSettings] classes.
+  /// [AndroidSettings] and [AppleSettings] classes.
   ///
   /// Throws a [TimeoutException] when no location is received within the
   /// supplied [timeLimit] duration.

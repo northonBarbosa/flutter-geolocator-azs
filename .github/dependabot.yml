@@ -122,69 +122,9 @@ updates:
     open-pull-requests-limit: 10
 
   - package-ecosystem: "pub"
-    directory: "/geolocator_linux"
-    commit-message:
-      prefix: "[geolocator_linux]"
-    schedule:
-      interval: "weekly"
-    reviewers:
-      - "mvanbeusekom"
-    open-pull-requests-limit: 10
-    
-  - package-ecosystem: "pub"
-    directory: "/geolocator_linux/example"
-    commit-message:
-      prefix: "[geolocator_linux]"
-    schedule:
-      interval: "weekly"
-    reviewers:
-      - "mvanbeusekom"
-    open-pull-requests-limit: 10
-
-  - package-ecosystem: "pub"
     directory: "/geolocator_platform_interface"
     commit-message:
       prefix: "[geolocator_platform_interface]"
-    schedule:
-      interval: "weekly"
-    reviewers:
-      - "mvanbeusekom"
-    open-pull-requests-limit: 10
-
-  - package-ecosystem: "pub"
-    directory: "/geolocator_web"
-    commit-message:
-      prefix: "[geolocator_web]"
-    schedule:
-      interval: "weekly"
-    reviewers:
-      - "mvanbeusekom"
-    open-pull-requests-limit: 10
-    
-  - package-ecosystem: "pub"
-    directory: "/geolocator_web/example"
-    commit-message:
-      prefix: "[geolocator_web]"
-    schedule:
-      interval: "weekly"
-    reviewers:
-      - "mvanbeusekom"
-    open-pull-requests-limit: 10
-
-  - package-ecosystem: "pub"
-    directory: "/geolocator_windows"
-    commit-message:
-      prefix: "[geolocator_windows]"
-    schedule:
-      interval: "weekly"
-    reviewers:
-      - "mvanbeusekom"
-    open-pull-requests-limit: 10
-    
-  - package-ecosystem: "pub"
-    directory: "/geolocator_windows/example"
-    commit-message:
-      prefix: "[geolocator_windows]"
     schedule:
       interval: "weekly"
     reviewers:
