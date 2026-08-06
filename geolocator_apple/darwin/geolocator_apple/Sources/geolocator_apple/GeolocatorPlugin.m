@@ -5,6 +5,7 @@
 #import "./include/geolocator_apple/Handlers/GeolocationHandler.h"
 #import "./include/geolocator_apple/Handlers/PermissionHandler.h"
 #import "./include/geolocator_apple/Handlers/PositionStreamHandler.h"
+#import "./include/geolocator_apple/Handlers/SpikeBackgroundTrackingHandler.h"
 #import "./include/geolocator_apple/Utils/ActivityTypeMapper.h"
 #import "./include/geolocator_apple/Utils/AuthorizationStatusMapper.h"
 #import "./include/geolocator_apple/Utils/LocationAccuracyMapper.h"
@@ -21,7 +22,9 @@
 @property(strong, nonatomic, nonnull) LocationAccuracyHandler *locationAccuracyHandler;
 
 @property(strong, nonatomic, nonnull) PermissionHandler *permissionHandler;
-  
+
+@property(strong, nonatomic, nonnull) SpikeBackgroundTrackingHandler *spikeBackgroundTrackingHandler;
+
 @end
 
 @implementation GeolocatorPlugin
@@ -38,14 +41,28 @@
   
   GeolocatorPlugin *instance = [[GeolocatorPlugin alloc] init];
   [registrar addMethodCallDelegate:instance channel:methodChannel];
-  
+  [registrar addApplicationDelegate:instance];
+
   PositionStreamHandler *positionStreamHandler = [[PositionStreamHandler alloc] initWithGeolocationHandler:instance.createGeolocationHandler];
   [positionUpdatesEventChannel setStreamHandler:positionStreamHandler];
-  
+
   LocationServiceStreamHandler *locationServiceStreamHandler = [[LocationServiceStreamHandler alloc] init];
   [locationServiceUpdatesEventChannel setStreamHandler:locationServiceStreamHandler];
-  
+
 }
+
+#if TARGET_OS_IOS
+// Spike da Fase 0 (docs/PLANO_BACKGROUND_IOS.md §1.2b): sem isto o plugin
+// nunca recebe UIApplicationLaunchOptionsLocationKey e um relaunch em
+// background é inútil, o app acorda e não faz nada.
+- (BOOL)application:(UIApplication *)application
+    didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
+  BOOL launchedByLocation = launchOptions[UIApplicationLaunchOptionsLocationKey] != nil;
+  [[self createSpikeBackgroundTrackingHandler] recordColdLaunchTriggeredByLocation:launchedByLocation];
+  [[self createSpikeBackgroundTrackingHandler] resumeIfNeeded];
+  return YES;
+}
+#endif
 
 - (GeolocationHandler *) createGeolocationHandler {
   if (!self.geolocationHandler) {
@@ -80,6 +97,17 @@
   self.permissionHandler = permissionHandler;
 }
 
+- (SpikeBackgroundTrackingHandler *) createSpikeBackgroundTrackingHandler {
+  if (!self.spikeBackgroundTrackingHandler) {
+    self.spikeBackgroundTrackingHandler = [[SpikeBackgroundTrackingHandler alloc] init];
+  }
+  return self.spikeBackgroundTrackingHandler;
+}
+
+- (void) setSpikeBackgroundTrackingHandlerOverride:(SpikeBackgroundTrackingHandler *)spikeBackgroundTrackingHandler {
+  self.spikeBackgroundTrackingHandler = spikeBackgroundTrackingHandler;
+}
+
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
   if ([@"checkPermission" isEqualToString:call.method]) {
     [self onCheckPermission:result];
@@ -102,8 +130,32 @@
     [self openSettings:result];
   } else if ([@"openLocationSettings" isEqualToString:call.method]) {
     [self openSettings:result];
+  } else if ([@"startSpikeBackgroundTracking" isEqualToString:call.method]) {
+    [self onStartSpikeBackgroundTracking:result];
+  } else if ([@"stopSpikeBackgroundTracking" isEqualToString:call.method]) {
+    [[self createSpikeBackgroundTrackingHandler] stopSpike];
+    result(nil);
+  } else if ([@"getSpikeTrackingLog" isEqualToString:call.method]) {
+    result([[self createSpikeBackgroundTrackingHandler] loggedEvents]);
+  } else if ([@"clearSpikeTrackingLog" isEqualToString:call.method]) {
+    [[self createSpikeBackgroundTrackingHandler] clearLog];
+    result(nil);
+  } else if ([@"spikeWasLaunchedByLocation" isEqualToString:call.method]) {
+    result(@([[self createSpikeBackgroundTrackingHandler] wasLastLaunchTriggeredByLocation]));
   } else {
     result(FlutterMethodNotImplemented);
+  }
+}
+
+- (void)onStartSpikeBackgroundTracking:(FlutterResult)result {
+  __block BOOL didFail = NO;
+  [[self createSpikeBackgroundTrackingHandler]
+      startSpikeWithErrorHandler:^(NSString *errorCode, NSString *errorDescription) {
+        didFail = YES;
+        result([FlutterError errorWithCode:errorCode message:errorDescription details:nil]);
+      }];
+  if (!didFail) {
+    result(nil);
   }
 }
 

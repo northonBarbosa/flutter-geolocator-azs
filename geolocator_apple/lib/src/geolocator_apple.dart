@@ -226,6 +226,44 @@ class GeolocatorApple extends GeolocatorPlatform {
       .invokeMethod<bool>('openLocationSettings')
       .then((value) => value ?? false);
 
+  // --- Spike da Fase 0 (docs/PLANO_BACKGROUND_IOS.md) ---
+  // Passthrough direto ao method channel, fora do contrato de
+  // GeolocatorPlatform: existe só para provar relaunch por
+  // startMonitoringSignificantLocationChanges em device real. Será
+  // substituído pela API formal (startBackgroundTracking etc.) quando as
+  // Fases 1/3/4 do plano entrarem — não depender destes métodos fora do
+  // spike.
+
+  /// Arma o monitoramento de significant location change. Requer permissão
+  /// "Always" já concedida (concedida manualmente em Ajustes por enquanto).
+  static Future<void> spikeStartBackgroundTracking() =>
+      _methodChannel.invokeMethod('startSpikeBackgroundTracking');
+
+  /// Desarma o monitoramento de significant location change.
+  static Future<void> spikeStopBackgroundTracking() =>
+      _methodChannel.invokeMethod('stopSpikeBackgroundTracking');
+
+  /// Eventos registrados pelo nativo (start/stop/relaunch/mudanças de
+  /// posição), mais recente por último.
+  static Future<List<Map<String, dynamic>>> spikeGetLoggedEvents() async {
+    final events =
+        await _methodChannel.invokeMethod<List<dynamic>>('getSpikeTrackingLog');
+    return (events ?? const [])
+        .cast<Map<dynamic, dynamic>>()
+        .map((event) => event.cast<String, dynamic>())
+        .toList();
+  }
+
+  /// Limpa o log de eventos persistido no nativo.
+  static Future<void> spikeClearLog() =>
+      _methodChannel.invokeMethod('clearSpikeTrackingLog');
+
+  /// Se o processo atual foi relançado pelo iOS por causa de um evento de
+  /// localização (UIApplicationLaunchOptionsLocationKey).
+  static Future<bool> spikeWasLaunchedByLocation() async =>
+      await _methodChannel.invokeMethod<bool>('spikeWasLaunchedByLocation') ??
+      false;
+
   Exception _handlePlatformException(PlatformException exception) {
     switch (exception.code) {
       case 'ACTIVITY_MISSING':
