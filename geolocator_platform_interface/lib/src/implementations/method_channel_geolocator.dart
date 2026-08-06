@@ -6,6 +6,8 @@ import '../enums/enums.dart';
 import '../errors/errors.dart';
 import '../extensions/extensions.dart';
 import '../geolocator_platform_interface.dart';
+import '../models/background_tracking_settings.dart';
+import '../models/buffered_position.dart';
 import '../models/position.dart';
 import '../models/location_settings.dart';
 
@@ -25,6 +27,11 @@ class MethodChannelGeolocator extends GeolocatorPlatform {
   static const _serviceStatusEventChannel =
       EventChannel('flutter.baseflow.com/geolocator_service_updates');
 
+  /// The event channel used to receive buffered-position-count updates from
+  /// the native platform while background tracking is active.
+  static const _bufferUpdateEventChannel =
+      EventChannel('flutter.baseflow.com/geolocator_buffer_updates');
+
   /// On Android devices you can set [forcedLocationManager]
   /// to true to force the plugin to use the [LocationManager] to determine the
   /// position instead of the [FusedLocationProviderClient]. On iOS this is
@@ -33,6 +40,7 @@ class MethodChannelGeolocator extends GeolocatorPlatform {
 
   Stream<Position>? _positionStream;
   Stream<ServiceStatus>? _serviceStatusStream;
+  Stream<int>? _bufferUpdateStream;
 
   @override
   Future<LocationPermission> checkPermission() async {
@@ -226,6 +234,94 @@ class MethodChannelGeolocator extends GeolocatorPlatform {
       .invokeMethod<bool>('openLocationSettings')
       .then((value) => value ?? false);
 
+  @override
+  Future<void> startBackgroundTracking({
+    required BackgroundTrackingSettings settings,
+  }) async {
+    try {
+      await _methodChannel.invokeMethod(
+        'startBackgroundTracking',
+        settings.toJson(),
+      );
+    } on PlatformException catch (e) {
+      throw _handlePlatformException(e);
+    }
+  }
+
+  @override
+  Future<void> stopBackgroundTracking() async {
+    await _methodChannel.invokeMethod('stopBackgroundTracking');
+  }
+
+  @override
+  Future<bool> isBackgroundTrackingActive() async => _methodChannel
+      .invokeMethod<bool>('isBackgroundTrackingActive')
+      .then((value) => value ?? false);
+
+  @override
+  Future<int> getBufferedPositionCount() async => _methodChannel
+      .invokeMethod<int>('getBufferedPositionCount')
+      .then((value) => value ?? 0);
+
+  @override
+  Future<List<BufferedPosition>> drainBufferedPositions({
+    int limit = 500,
+  }) async {
+    final positions = await _methodChannel.invokeMethod<List<dynamic>>(
+      'drainBufferedPositions',
+      <String, dynamic>{'limit': limit},
+    );
+
+    return (positions ?? const [])
+        .map((dynamic element) => BufferedPosition.fromMap(element))
+        .toList();
+  }
+
+  @override
+  Future<void> acknowledgePositions(List<int> ids) async {
+    await _methodChannel.invokeMethod(
+      'acknowledgePositions',
+      <String, dynamic>{'ids': ids},
+    );
+  }
+
+  @override
+  Future<void> clearBufferedPositions() async {
+    await _methodChannel.invokeMethod('clearBufferedPositions');
+  }
+
+  @override
+  Stream<int> getBufferUpdateStream() {
+    if (_bufferUpdateStream != null) {
+      return _bufferUpdateStream!;
+    }
+
+    _bufferUpdateStream = _bufferUpdateEventChannel
+        .receiveBroadcastStream()
+        .map((dynamic element) => element as int)
+        .handleError((error) {
+      _bufferUpdateStream = null;
+      if (error is PlatformException) {
+        error = _handlePlatformException(error);
+      }
+      throw error;
+    });
+
+    return _bufferUpdateStream!;
+  }
+
+  @override
+  Future<LocationPermission> requestAlwaysPermission() async {
+    try {
+      final int permission =
+          await _methodChannel.invokeMethod('requestAlwaysPermission');
+
+      return permission.toLocationPermission();
+    } on PlatformException catch (e) {
+      throw _handlePlatformException(e);
+    }
+  }
+
   Exception _handlePlatformException(PlatformException exception) {
     switch (exception.code) {
       case 'ACTIVITY_MISSING':
@@ -242,6 +338,10 @@ class MethodChannelGeolocator extends GeolocatorPlatform {
         return PermissionRequestInProgressException(exception.message);
       case 'LOCATION_UPDATE_FAILURE':
         return PositionUpdateException(exception.message);
+      case 'BACKGROUND_PERMISSION_DENIED':
+        return BackgroundPermissionDeniedException(exception.message);
+      case 'BACKGROUND_MODES_NOT_CONFIGURED':
+        return BackgroundModesNotConfiguredException(exception.message);
       default:
         return exception;
     }

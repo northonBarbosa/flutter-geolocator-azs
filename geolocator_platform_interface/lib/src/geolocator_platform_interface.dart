@@ -252,6 +252,107 @@ abstract class GeolocatorPlatform extends PlatformInterface {
     return degree * pi / 180;
   }
 
+  // --- Fase 0/1 do plano de background tracking
+  // (docs/PLANO_BACKGROUND_IOS.md): contrato para tracking em background que
+  // sobrevive a suspensão e a terminação pelo app. Todos os métodos abaixo
+  // usam UnimplementedError como default para não quebrar plataformas que
+  // ainda não implementam o recurso (ex.: Android, nesta fase). ---
+
+  /// Starts producing [Position] updates in the background, persisted on the
+  /// platform side so they survive the app being suspended or terminated by
+  /// the system.
+  ///
+  /// Requires `LocationPermission.always` to have been granted; call
+  /// [requestAlwaysPermission] first. Throws a
+  /// [BackgroundPermissionDeniedException] if that permission is missing,
+  /// and a [BackgroundModesNotConfiguredException] if the host app is
+  /// missing the platform configuration required to run in the background.
+  ///
+  /// Positions are not delivered directly to Dart. Use
+  /// [getBufferUpdateStream] to know when new positions are available, then
+  /// [drainBufferedPositions] to read them and [acknowledgePositions] to
+  /// remove them from the buffer once safely handed off.
+  Future<void> startBackgroundTracking({
+    required BackgroundTrackingSettings settings,
+  }) {
+    throw UnimplementedError(
+      'startBackgroundTracking() has not been implemented.',
+    );
+  }
+
+  /// Stops background tracking started by [startBackgroundTracking].
+  ///
+  /// Already buffered positions are left untouched; drain them with
+  /// [drainBufferedPositions] if needed.
+  Future<void> stopBackgroundTracking() {
+    throw UnimplementedError(
+      'stopBackgroundTracking() has not been implemented.',
+    );
+  }
+
+  /// Returns whether background tracking is currently active.
+  Future<bool> isBackgroundTrackingActive() {
+    throw UnimplementedError(
+      'isBackgroundTrackingActive() has not been implemented.',
+    );
+  }
+
+  /// Returns the number of positions currently sitting in the buffer.
+  Future<int> getBufferedPositionCount() {
+    throw UnimplementedError(
+      'getBufferedPositionCount() has not been implemented.',
+    );
+  }
+
+  /// Reads up to [limit] buffered positions without removing them from the
+  /// buffer.
+  ///
+  /// Positions are only removed once you call [acknowledgePositions] with
+  /// their [BufferedPosition.id]s, so that a failure between reading and
+  /// safely handing off the positions (e.g. the app being killed mid-upload)
+  /// never loses data — at worst, the same batch is drained again.
+  Future<List<BufferedPosition>> drainBufferedPositions({int limit = 500}) {
+    throw UnimplementedError(
+      'drainBufferedPositions() has not been implemented.',
+    );
+  }
+
+  /// Removes the positions identified by [ids] (see
+  /// [BufferedPosition.id]) from the buffer.
+  Future<void> acknowledgePositions(List<int> ids) {
+    throw UnimplementedError(
+      'acknowledgePositions() has not been implemented.',
+    );
+  }
+
+  /// Removes all positions currently sitting in the buffer.
+  Future<void> clearBufferedPositions() {
+    throw UnimplementedError(
+      'clearBufferedPositions() has not been implemented.',
+    );
+  }
+
+  /// Fires with the current buffered-position count whenever new positions
+  /// are added to the buffer while the Flutter engine is alive.
+  ///
+  /// This is purely a UX convenience — background tracking does not depend
+  /// on the engine being alive to keep buffering positions. Use
+  /// [getBufferedPositionCount] to poll the count on demand.
+  Stream<int> getBufferUpdateStream() {
+    throw UnimplementedError(
+      'getBufferUpdateStream() has not been implemented.',
+    );
+  }
+
+  /// Requests `LocationPermission.always`, following whatever platform
+  /// specific flow is required (e.g. the mandatory two-step "when in use"
+  /// then "always" flow on iOS).
+  Future<LocationPermission> requestAlwaysPermission() {
+    throw UnimplementedError(
+      'requestAlwaysPermission() has not been implemented.',
+    );
+  }
+
   /// Calculates the initial bearing between two points
   ///
   /// The initial bearing will most of the time be different than the end
