@@ -68,6 +68,20 @@ class _SpikeHomePageState extends State<SpikeHomePage> {
     await _refresh();
   }
 
+  Future<void> _openAppSettings() async {
+    await GeolocatorApple().openAppSettings();
+  }
+
+  Future<void> _requestPermission() async {
+    setState(() => _lastError = null);
+    try {
+      final permission = await GeolocatorApple().requestPermission();
+      setState(() => _lastError = 'Permissão atual: $permission');
+    } catch (e) {
+      setState(() => _lastError = '$e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -94,6 +108,10 @@ class _SpikeHomePageState extends State<SpikeHomePage> {
                   spacing: 8,
                   children: [
                     ElevatedButton(
+                      onPressed: _requestPermission,
+                      child: const Text('Pedir permissão (When In Use)'),
+                    ),
+                    ElevatedButton(
                       onPressed: _start,
                       child: const Text('Iniciar spike'),
                     ),
@@ -108,6 +126,10 @@ class _SpikeHomePageState extends State<SpikeHomePage> {
                     ElevatedButton(
                       onPressed: _clear,
                       child: const Text('Limpar log'),
+                    ),
+                    ElevatedButton(
+                      onPressed: _openAppSettings,
+                      child: const Text('Ajustes (Always)'),
                     ),
                   ],
                 ),
