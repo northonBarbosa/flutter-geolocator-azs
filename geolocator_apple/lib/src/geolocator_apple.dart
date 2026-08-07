@@ -65,6 +65,21 @@ class GeolocatorApple extends GeolocatorPlatform {
   }
 
   @override
+  Future<LocationPermission> requestAlwaysPermission() async {
+    try {
+      // ignore: omit_local_variable_types
+      final int permission =
+          await _methodChannel.invokeMethod('requestAlwaysPermission');
+
+      return permission.toLocationPermission();
+    } on PlatformException catch (e) {
+      final error = _handlePlatformException(e);
+
+      throw error;
+    }
+  }
+
+  @override
   Future<bool> isLocationServiceEnabled() async => _methodChannel
       .invokeMethod<bool>('isLocationServiceEnabled')
       .then((value) => value ?? false);

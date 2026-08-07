@@ -82,6 +82,16 @@ class _SpikeHomePageState extends State<SpikeHomePage> {
     }
   }
 
+  Future<void> _requestAlwaysPermission() async {
+    setState(() => _lastError = null);
+    try {
+      final permission = await GeolocatorApple().requestAlwaysPermission();
+      setState(() => _lastError = 'Permissão atual: $permission');
+    } catch (e) {
+      setState(() => _lastError = '$e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -110,6 +120,10 @@ class _SpikeHomePageState extends State<SpikeHomePage> {
                     ElevatedButton(
                       onPressed: _requestPermission,
                       child: const Text('Pedir permissão (When In Use)'),
+                    ),
+                    ElevatedButton(
+                      onPressed: _requestAlwaysPermission,
+                      child: const Text('Pedir permissão (Always)'),
                     ),
                     ElevatedButton(
                       onPressed: _start,

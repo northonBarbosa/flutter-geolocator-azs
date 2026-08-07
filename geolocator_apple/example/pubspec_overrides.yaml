@@ -1,0 +1,4 @@
+# Ver geolocator_apple/pubspec_overrides.yaml.
+dependency_overrides:
+  geolocator_platform_interface:
+    path: ../../geolocator_platform_interface

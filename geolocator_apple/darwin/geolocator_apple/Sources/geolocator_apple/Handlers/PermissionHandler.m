@@ -14,6 +14,7 @@
 @property (strong, nonatomic) CLLocationManager *locationManager;
 @property (strong, nonatomic) PermissionConfirmation confirmationHandler;
 @property (strong, nonatomic) PermissionError errorHandler;
+@property (assign, nonatomic) BOOL isRequestingAlwaysPermission;
 
 @end
 
@@ -91,6 +92,68 @@
   }
 }
 
+- (void) requestAlwaysPermission:(PermissionConfirmation)confirmationHandler
+                     errorHandler:(PermissionError)errorHandler {
+  CLAuthorizationStatus authorizationStatus = [self checkPermission];
+
+  if (authorizationStatus == kCLAuthorizationStatusAuthorizedAlways ||
+      authorizationStatus == kCLAuthorizationStatusDenied ||
+      authorizationStatus == kCLAuthorizationStatusRestricted) {
+    // Já é Always, ou negado/restrito — pedir de novo não muda nada, o iOS
+    // nem mostra prompt nesses estados.
+    confirmationHandler(authorizationStatus);
+    return;
+  }
+
+  if (self.confirmationHandler) {
+    errorHandler(GeolocatorErrorPermissionRequestInProgress,
+                 @"A request for location permissions is already running, please wait for it to complete before doing another request.");
+    return;
+  }
+
+  NSString *missingKeysMessage = [self missingAlwaysPermissionPlistKeysMessageForStatus:authorizationStatus];
+  if (missingKeysMessage != nil) {
+    errorHandler(GeolocatorErrorPermissionDefinitionsNotFound, missingKeysMessage);
+    return;
+  }
+
+  self.confirmationHandler = confirmationHandler;
+  self.errorHandler = errorHandler;
+  self.isRequestingAlwaysPermission = YES;
+  CLLocationManager *locationManager = [self getLocationManager];
+  locationManager.delegate = self;
+
+  if (authorizationStatus == kCLAuthorizationStatusAuthorizedWhenInUse) {
+    [locationManager requestAlwaysAuthorization];
+  } else {
+    [locationManager requestWhenInUseAuthorization];
+  }
+}
+
+/// Retorna nil se as chaves do Info.plist necessárias pro passo restante do
+/// fluxo (a partir de [status]) estiverem presentes, ou uma mensagem
+/// nomeando exatamente qual chave falta.
+- (NSString *) missingAlwaysPermissionPlistKeysMessageForStatus:(CLAuthorizationStatus)status {
+  NSMutableArray<NSString *> *missingKeys = [NSMutableArray array];
+
+  if (status == kCLAuthorizationStatusNotDetermined &&
+      [[NSBundle mainBundle] objectForInfoDictionaryKey:@"NSLocationWhenInUseUsageDescription"] == nil) {
+    [missingKeys addObject:@"NSLocationWhenInUseUsageDescription"];
+  }
+
+  if ([[NSBundle mainBundle] objectForInfoDictionaryKey:@"NSLocationAlwaysAndWhenInUseUsageDescription"] == nil) {
+    [missingKeys addObject:@"NSLocationAlwaysAndWhenInUseUsageDescription"];
+  }
+
+  if (missingKeys.count == 0) {
+    return nil;
+  }
+
+  return [NSString stringWithFormat:
+          @"Requesting \"Always\" location permission requires the following key(s) in the app's Info.plist: %@.",
+          [missingKeys componentsJoinedByString:@", "]];
+}
+
 #if !BYPASS_PERMISSION_LOCATION_ALWAYS
 - (BOOL) containsLocationAlwaysDescription {
   BOOL containsAlwaysDescription = NO;
@@ -108,11 +171,21 @@
   if (status == kCLAuthorizationStatusNotDetermined) {
     return;
   }
-  
+
+  if (self.isRequestingAlwaysPermission && status == kCLAuthorizationStatusAuthorizedWhenInUse) {
+    // Primeiro passo concluído (When In Use). Dispara o segundo passo sem
+    // destruir o locationManager — um manager desalocado não entrega o
+    // segundo didChangeAuthorizationStatus.
+    [manager requestAlwaysAuthorization];
+    return;
+  }
+
+  self.isRequestingAlwaysPermission = NO;
+
   if (self.confirmationHandler) {
     self.confirmationHandler(status);
   }
-  
+
   [self cleanUp];
 }
 
@@ -120,5 +193,6 @@
   self.locationManager = nil;
   self.errorHandler = nil;
   self.confirmationHandler = nil;
+  self.isRequestingAlwaysPermission = NO;
 }
 @end

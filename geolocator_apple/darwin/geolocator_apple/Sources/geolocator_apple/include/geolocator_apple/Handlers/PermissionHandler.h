@@ -21,6 +21,13 @@ typedef void (^PermissionError)(NSString *errorCode, NSString *errorDiscription)
 - (void) requestPermission:(PermissionConfirmation)confirmationHandler
               errorHandler:(PermissionError)errorHandler;
 
+/// Implementa o fluxo obrigatório em dois passos do iOS: se a permissão
+/// ainda não foi determinada, pede "When In Use" primeiro e só então pede
+/// "Always" — o iOS não mostra o prompt de Always se o app nunca teve When
+/// In Use. Se já for "When In Use", pula direto pro segundo passo.
+- (void) requestAlwaysPermission:(PermissionConfirmation)confirmationHandler
+                     errorHandler:(PermissionError)errorHandler;
+
 @end
 
 #endif /* PermissionHandler_h */

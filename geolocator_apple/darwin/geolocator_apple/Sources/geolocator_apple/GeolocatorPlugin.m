@@ -113,6 +113,8 @@
     [self onCheckPermission:result];
   } else if ([@"requestPermission" isEqualToString:call.method]) {
     [self onRequestPermission:result];
+  } else if ([@"requestAlwaysPermission" isEqualToString:call.method]) {
+    [self onRequestAlwaysPermission:result];
   } else if ([@"isLocationServiceEnabled" isEqualToString:call.method]) {
     [self onIsLocationServiceEnabled:result];
   } else if ([@"getLastKnownPosition" isEqualToString:call.method]) {
@@ -167,6 +169,18 @@
 - (void)onRequestPermission:(FlutterResult)result {
   [[self createPermissionHandler]
    requestPermission:^(CLAuthorizationStatus status) {
+    result([AuthorizationStatusMapper toDartIndex:status]);
+  }
+   errorHandler:^(NSString *errorCode, NSString *errorDescription) {
+    result([FlutterError errorWithCode: errorCode
+                               message: errorDescription
+                               details: nil]);
+  }];
+}
+
+- (void)onRequestAlwaysPermission:(FlutterResult)result {
+  [[self createPermissionHandler]
+   requestAlwaysPermission:^(CLAuthorizationStatus status) {
     result([AuthorizationStatusMapper toDartIndex:status]);
   }
    errorHandler:^(NSString *errorCode, NSString *errorDescription) {
