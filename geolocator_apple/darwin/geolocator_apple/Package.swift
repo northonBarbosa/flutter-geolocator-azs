@@ -23,6 +23,9 @@ let package = Package(
             publicHeadersPath: "include/geolocator_apple",
             cSettings: [
                 .headerSearchPath("include/geolocator_apple")
+            ],
+            linkerSettings: [
+                .linkedLibrary("sqlite3")
             ]
         )
     ]
