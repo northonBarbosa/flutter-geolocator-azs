@@ -28,6 +28,22 @@ static NSString *const kLastEmittedTimestampMsKey =
 
 @implementation TrackingStateStore
 
+// NSUserDefaults só aceita valores de property list — NSNull não é um
+// deles. Chaves opcionais serializadas do lado Dart como null (ex.
+// maxPositionAgeMillis quando BackgroundTrackingSettings.maxPositionAge é
+// nil) chegam aqui como NSNull dentro do dicionário do method channel, e
+// setObject:forKey: com isso presente crasha com NSInvalidArgumentException
+// em vez de falhar de forma silenciosa/óbvia.
++ (NSDictionary<NSString *, id> *)propertyListSafeDictionary:(NSDictionary<NSString *, id> *)dictionary {
+  NSMutableDictionary<NSString *, id> *safeDictionary = [NSMutableDictionary dictionaryWithCapacity:dictionary.count];
+  [dictionary enumerateKeysAndObjectsUsingBlock:^(NSString *key, id value, BOOL *stop) {
+    if (![value isEqual:[NSNull null]]) {
+      safeDictionary[key] = value;
+    }
+  }];
+  return safeDictionary;
+}
+
 - (BOOL)isTrackingEnabled {
   return [[NSUserDefaults standardUserDefaults] boolForKey:kIsTrackingEnabledKey];
 }
@@ -44,7 +60,8 @@ static NSString *const kLastEmittedTimestampMsKey =
   NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
   [defaults setBool:YES forKey:kIsTrackingEnabledKey];
   [defaults setObject:[[NSUUID UUID] UUIDString] forKey:kSessionIdKey];
-  [defaults setObject:settings forKey:kSerializedSettingsKey];
+  [defaults setObject:[TrackingStateStore propertyListSafeDictionary:settings]
+                forKey:kSerializedSettingsKey];
   [defaults setBool:NO forKey:kHasAnchorKey];
   [defaults setBool:NO forKey:kHasLastEmittedKey];
 }

@@ -13,3 +13,6 @@ NSString * const GeolocatorErrorLocationSubscriptionActive = @"LOCATION_SUBSCRIP
 NSString * const GeolocatorErrorPermissionDefinitionsNotFound = @"PERMISSION_DEFINITIONS_NOT_FOUND";
 NSString * const GeolocatorErrorPermissionDenied = @"PERMISSION_DENIED";
 NSString * const GeolocatorErrorPermissionRequestInProgress = @"PERMISSION_REQUEST_IN_PROGRESS";
+NSString * const GeolocatorErrorBackgroundPermissionDenied = @"BACKGROUND_PERMISSION_DENIED";
+NSString * const GeolocatorErrorBackgroundModesNotConfigured = @"BACKGROUND_MODES_NOT_CONFIGURED";
+NSString * const GeolocatorErrorBackgroundTrackingAlreadyActive = @"BACKGROUND_TRACKING_ALREADY_ACTIVE";
