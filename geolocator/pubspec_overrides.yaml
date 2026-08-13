@@ -1,0 +1,10 @@
+# Linka geolocator_apple e geolocator_platform_interface locais (fork)
+# enquanto o contrato de background tracking
+# (docs/PLANO_BACKGROUND_IOS.md) é desenvolvido em paralelo nesses
+# pacotes. Remover quando as versões publicadas incorporarem essas
+# mudanças.
+dependency_overrides:
+  geolocator_platform_interface:
+    path: ../geolocator_platform_interface
+  geolocator_apple:
+    path: ../geolocator_apple

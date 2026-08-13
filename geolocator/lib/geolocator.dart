@@ -12,7 +12,7 @@ export 'package:geolocator_android/geolocator_android.dart'
         AndroidResource,
         AndroidPosition;
 export 'package:geolocator_apple/geolocator_apple.dart'
-    show AppleSettings, ActivityType;
+    show AppleSettings, AppleBackgroundSettings, ActivityType;
 export 'package:geolocator_platform_interface/geolocator_platform_interface.dart';
 
 /// Wraps CLLocationManager (on iOS) and FusedLocationProviderClient or
@@ -276,4 +276,72 @@ class Geolocator {
         endLatitude,
         endLongitude,
       );
+
+  /// Starts producing [Position] updates in the background, persisted on
+  /// the platform side so they survive the app being suspended or
+  /// terminated by the system.
+  ///
+  /// Requires `LocationPermission.always` to have been granted; call
+  /// [requestAlwaysPermission] first. Use platform-specific settings (e.g.
+  /// `AppleBackgroundSettings` on iOS) to control the underlying strategy.
+  ///
+  /// Positions are not delivered directly to Dart. Use
+  /// [getBufferUpdateStream] to know when new positions are available, then
+  /// [drainBufferedPositions] to read them and [acknowledgePositions] to
+  /// remove them from the buffer once safely handed off.
+  static Future<void> startBackgroundTracking({
+    required BackgroundTrackingSettings settings,
+  }) =>
+      GeolocatorPlatform.instance.startBackgroundTracking(settings: settings);
+
+  /// Stops background tracking started by [startBackgroundTracking].
+  ///
+  /// Already buffered positions are left untouched; drain them with
+  /// [drainBufferedPositions] if needed.
+  static Future<void> stopBackgroundTracking() =>
+      GeolocatorPlatform.instance.stopBackgroundTracking();
+
+  /// Returns whether background tracking is currently active.
+  static Future<bool> isBackgroundTrackingActive() =>
+      GeolocatorPlatform.instance.isBackgroundTrackingActive();
+
+  /// Returns the number of positions currently sitting in the buffer.
+  static Future<int> getBufferedPositionCount() =>
+      GeolocatorPlatform.instance.getBufferedPositionCount();
+
+  /// Reads up to [limit] buffered positions without removing them from the
+  /// buffer.
+  ///
+  /// Positions are only removed once you call [acknowledgePositions] with
+  /// their ids, so that a failure between reading and safely handing off
+  /// the positions (e.g. the app being killed mid-upload) never loses data
+  /// — at worst, the same batch is drained again.
+  static Future<List<BufferedPosition>> drainBufferedPositions({
+    int limit = 500,
+  }) =>
+      GeolocatorPlatform.instance.drainBufferedPositions(limit: limit);
+
+  /// Removes the positions identified by [ids] (see [BufferedPosition.id])
+  /// from the buffer.
+  static Future<void> acknowledgePositions(List<int> ids) =>
+      GeolocatorPlatform.instance.acknowledgePositions(ids);
+
+  /// Removes all positions currently sitting in the buffer.
+  static Future<void> clearBufferedPositions() =>
+      GeolocatorPlatform.instance.clearBufferedPositions();
+
+  /// Fires with the current buffered-position count whenever new positions
+  /// are added to the buffer while the Flutter engine is alive.
+  ///
+  /// This is purely a UX convenience — background tracking does not depend
+  /// on the engine being alive to keep buffering positions. Use
+  /// [getBufferedPositionCount] to poll the count on demand.
+  static Stream<int> getBufferUpdateStream() =>
+      GeolocatorPlatform.instance.getBufferUpdateStream();
+
+  /// Requests `LocationPermission.always`, following whatever platform
+  /// specific flow is required (e.g. the mandatory two-step "when in use"
+  /// then "always" flow on iOS).
+  static Future<LocationPermission> requestAlwaysPermission() =>
+      GeolocatorPlatform.instance.requestAlwaysPermission();
 }
