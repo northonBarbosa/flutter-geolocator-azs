@@ -26,6 +26,10 @@ static NSString *const kAnchorRegionIdentifier = @"geolocator_apple.background_t
 static NSTimeInterval const kMaxLocationAgeSeconds = 60.0;
 static NSTimeInterval const kBackgroundTaskGracePeriodSeconds = 2.0;
 
+NSString *const GeolocatorBufferDidGrowNotification =
+    @"GeolocatorBufferDidGrowNotification";
+NSString *const kBufferCountUserInfoKey = @"count";
+
 @interface BackgroundTrackingHandler ()
 
 @property(strong, nonatomic) CLLocationManager *locationManager;
@@ -77,10 +81,49 @@ static NSTimeInterval const kBackgroundTaskGracePeriodSeconds = 2.0;
   return _locationManager;
 }
 
+// Leitura do buffer (count/drain/ack/clear) precisa funcionar mesmo quando
+// o tracking não está ativo neste processo — pode haver posições deixadas
+// por uma sessão anterior ainda não drenadas. maxBufferedPositions/
+// maxPositionAgeSeconds só afetam poda em insert, então os defaults abaixo
+// são inofensivos pra leitura pura.
+- (PositionStore *)getPositionStore {
+  if (!_positionStore) {
+    NSInteger maxBufferedPositions = self.maxBufferedPositions > 0 ? self.maxBufferedPositions : 50000;
+    _positionStore = [[PositionStore alloc] initWithMaxBufferedPositions:maxBufferedPositions
+                                                    maxPositionAgeSeconds:self.maxPositionAgeSeconds];
+  }
+  return _positionStore;
+}
+
+#pragma mark - Buffer (drain -> ack)
+
+- (NSUInteger)bufferedPositionCount {
+  return [[self getPositionStore] positionCount];
+}
+
+- (NSArray<NSDictionary<NSString *, id> *> *)drainPositionsWithLimit:(NSUInteger)limit {
+  return [[self getPositionStore] queryPositionsWithLimit:limit];
+}
+
+- (void)acknowledgePositionIds:(NSArray<NSNumber *> *)ids {
+  [[self getPositionStore] acknowledgePositionIds:ids];
+}
+
+- (void)clearBufferedPositions {
+  [[self getPositionStore] clearAllPositions];
+}
+
 #pragma mark - Start / Stop / Resume
 
 - (void)startWithSettings:(NSDictionary<NSString *, id> *)settings
               errorHandler:(BackgroundTrackingErrorHandler)errorHandler {
+  if ([self isActive]) {
+    errorHandler(GeolocatorErrorBackgroundTrackingAlreadyActive,
+                 @"Background tracking is already active. Call stopBackgroundTracking() first "
+                 @"if you want to change the settings.");
+    return;
+  }
+
 #if TARGET_OS_IOS
   if ([self.permissionHandler checkPermission] != kCLAuthorizationStatusAuthorizedAlways) {
     errorHandler(GeolocatorErrorBackgroundPermissionDenied,
@@ -356,7 +399,21 @@ static NSTimeInterval const kBackgroundTaskGracePeriodSeconds = 2.0;
     return;
   }
 
-  [self.positionStore insertLocations:accepted source:@"continuous" sessionId:self.sessionId];
+  // CoreLocation entrega updates de startUpdatingLocation e de
+  // startMonitoringSignificantLocationChanges pelo mesmo callback, sem
+  // dizer qual gatilho produziu qual fix. Em modo puro dá pra saber com
+  // certeza (só um gatilho está ativo); em hybrid os dois estão ativos ao
+  // mesmo tempo e não tem como distinguir — rotula como "continuous" por
+  // ser a fonte de maior frequência, é só metadado de diagnóstico, não
+  // afeta a posição em si.
+  NSString *source = self.mode == GeolocatorBackgroundTrackingModeSignificant
+                          ? @"significantChange"
+                          : @"continuous";
+  [self.positionStore insertLocations:accepted source:source sessionId:self.sessionId];
+  [[NSNotificationCenter defaultCenter]
+      postNotificationName:GeolocatorBufferDidGrowNotification
+                    object:nil
+                  userInfo:@{kBufferCountUserInfoKey : @([self bufferedPositionCount])}];
 
   if (self.mode == GeolocatorBackgroundTrackingModeHybrid) {
     [self repositionAnchorRegionIfNeededForLocation:accepted.lastObject];

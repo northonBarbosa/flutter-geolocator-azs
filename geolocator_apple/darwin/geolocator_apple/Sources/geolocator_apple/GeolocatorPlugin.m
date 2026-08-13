@@ -5,8 +5,8 @@
 #import "./include/geolocator_apple/Handlers/GeolocationHandler.h"
 #import "./include/geolocator_apple/Handlers/PermissionHandler.h"
 #import "./include/geolocator_apple/Handlers/PositionStreamHandler.h"
-#import "./include/geolocator_apple/Handlers/SpikeBackgroundTrackingHandler.h"
 #import "./include/geolocator_apple/Handlers/BackgroundTrackingHandler.h"
+#import "./include/geolocator_apple/Handlers/BufferStreamHandler.h"
 #import "./include/geolocator_apple/Utils/ActivityTypeMapper.h"
 #import "./include/geolocator_apple/Utils/AuthorizationStatusMapper.h"
 #import "./include/geolocator_apple/Utils/LocationAccuracyMapper.h"
@@ -24,8 +24,6 @@
 
 @property(strong, nonatomic, nonnull) PermissionHandler *permissionHandler;
 
-@property(strong, nonatomic, nonnull) SpikeBackgroundTrackingHandler *spikeBackgroundTrackingHandler;
-
 @property(strong, nonatomic, nonnull) BackgroundTrackingHandler *backgroundTrackingHandler;
 
 @end
@@ -41,7 +39,11 @@
                                                       binaryMessenger:registrar.messenger];
   
   FlutterEventChannel *locationServiceUpdatesEventChannel = [FlutterEventChannel eventChannelWithName:@"flutter.baseflow.com/geolocator_service_updates_apple" binaryMessenger:registrar.messenger];
-  
+
+  FlutterEventChannel *bufferUpdatesEventChannel = [FlutterEventChannel
+                                                    eventChannelWithName:@"flutter.baseflow.com/geolocator_buffer_apple"
+                                                    binaryMessenger:registrar.messenger];
+
   GeolocatorPlugin *instance = [[GeolocatorPlugin alloc] init];
   [registrar addMethodCallDelegate:instance channel:methodChannel];
   [registrar addApplicationDelegate:instance];
@@ -52,20 +54,21 @@
   LocationServiceStreamHandler *locationServiceStreamHandler = [[LocationServiceStreamHandler alloc] init];
   [locationServiceUpdatesEventChannel setStreamHandler:locationServiceStreamHandler];
 
+  BufferStreamHandler *bufferStreamHandler = [[BufferStreamHandler alloc] init];
+  [bufferUpdatesEventChannel setStreamHandler:bufferStreamHandler];
+
 }
 
 #if TARGET_OS_IOS
-// Sem isto (§1.2b do plano) o plugin nunca recebe
+// Sem addApplicationDelegate + isto (§1.2b do plano) o plugin nunca recebe
 // UIApplicationLaunchOptionsLocationKey e um relaunch em background é
-// inútil, o app acorda e não faz nada. Chamamos resumeFromPersistedStateIfNeeded
-// mesmo quando launchedByLocation é NO: o app pode ter sido reaberto
-// normalmente pelo usuário depois de ter sido morto, e o tracking também
-// precisa voltar nesse caso — a flag serve só de telemetria.
+// inútil, o app acorda e não faz nada. Chamamos
+// resumeFromPersistedStateIfNeeded incondicionalmente, não só quando
+// launchOptions indica relaunch por localização: o app pode ter sido
+// reaberto normalmente pelo usuário depois de ter sido morto, e o tracking
+// também precisa voltar nesse caso.
 - (BOOL)application:(UIApplication *)application
     didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
-  BOOL launchedByLocation = launchOptions[UIApplicationLaunchOptionsLocationKey] != nil;
-  [[self createSpikeBackgroundTrackingHandler] recordColdLaunchTriggeredByLocation:launchedByLocation];
-  [[self createSpikeBackgroundTrackingHandler] resumeIfNeeded];
   [[self createBackgroundTrackingHandler] resumeFromPersistedStateIfNeeded];
   return YES;
 }
@@ -104,17 +107,6 @@
   self.permissionHandler = permissionHandler;
 }
 
-- (SpikeBackgroundTrackingHandler *) createSpikeBackgroundTrackingHandler {
-  if (!self.spikeBackgroundTrackingHandler) {
-    self.spikeBackgroundTrackingHandler = [[SpikeBackgroundTrackingHandler alloc] init];
-  }
-  return self.spikeBackgroundTrackingHandler;
-}
-
-- (void) setSpikeBackgroundTrackingHandlerOverride:(SpikeBackgroundTrackingHandler *)spikeBackgroundTrackingHandler {
-  self.spikeBackgroundTrackingHandler = spikeBackgroundTrackingHandler;
-}
-
 - (BackgroundTrackingHandler *) createBackgroundTrackingHandler {
   if (!self.backgroundTrackingHandler) {
     self.backgroundTrackingHandler = [[BackgroundTrackingHandler alloc] init];
@@ -150,33 +142,46 @@
     [self openSettings:result];
   } else if ([@"openLocationSettings" isEqualToString:call.method]) {
     [self openSettings:result];
-  } else if ([@"startSpikeBackgroundTracking" isEqualToString:call.method]) {
-    [self onStartSpikeBackgroundTracking:result];
-  } else if ([@"stopSpikeBackgroundTracking" isEqualToString:call.method]) {
-    [[self createSpikeBackgroundTrackingHandler] stopSpike];
+  } else if ([@"startBackgroundTracking" isEqualToString:call.method]) {
+    [self onStartBackgroundTrackingWithArguments:call.arguments result:result];
+  } else if ([@"stopBackgroundTracking" isEqualToString:call.method]) {
+    [[self createBackgroundTrackingHandler] stop];
     result(nil);
-  } else if ([@"getSpikeTrackingLog" isEqualToString:call.method]) {
-    result([[self createSpikeBackgroundTrackingHandler] loggedEvents]);
-  } else if ([@"clearSpikeTrackingLog" isEqualToString:call.method]) {
-    [[self createSpikeBackgroundTrackingHandler] clearLog];
+  } else if ([@"isBackgroundTrackingActive" isEqualToString:call.method]) {
+    result(@([[self createBackgroundTrackingHandler] isActive]));
+  } else if ([@"getBufferedPositionCount" isEqualToString:call.method]) {
+    result(@([[self createBackgroundTrackingHandler] bufferedPositionCount]));
+  } else if ([@"drainBufferedPositions" isEqualToString:call.method]) {
+    [self onDrainBufferedPositionsWithArguments:call.arguments result:result];
+  } else if ([@"acknowledgePositions" isEqualToString:call.method]) {
+    NSArray<NSNumber *> *ids = call.arguments[@"ids"];
+    [[self createBackgroundTrackingHandler] acknowledgePositionIds:ids];
     result(nil);
-  } else if ([@"spikeWasLaunchedByLocation" isEqualToString:call.method]) {
-    result(@([[self createSpikeBackgroundTrackingHandler] wasLastLaunchTriggeredByLocation]));
+  } else if ([@"clearBufferedPositions" isEqualToString:call.method]) {
+    [[self createBackgroundTrackingHandler] clearBufferedPositions];
+    result(nil);
   } else {
     result(FlutterMethodNotImplemented);
   }
 }
 
-- (void)onStartSpikeBackgroundTracking:(FlutterResult)result {
+- (void)onStartBackgroundTrackingWithArguments:(id _Nullable)arguments result:(FlutterResult)result {
   __block BOOL didFail = NO;
-  [[self createSpikeBackgroundTrackingHandler]
-      startSpikeWithErrorHandler:^(NSString *errorCode, NSString *errorDescription) {
-        didFail = YES;
-        result([FlutterError errorWithCode:errorCode message:errorDescription details:nil]);
-      }];
+  [[self createBackgroundTrackingHandler]
+      startWithSettings:arguments
+           errorHandler:^(NSString *errorCode, NSString *errorDescription) {
+             didFail = YES;
+             result([FlutterError errorWithCode:errorCode message:errorDescription details:nil]);
+           }];
   if (!didFail) {
     result(nil);
   }
+}
+
+- (void)onDrainBufferedPositionsWithArguments:(id _Nullable)arguments result:(FlutterResult)result {
+  NSNumber *limitArgument = arguments[@"limit"];
+  NSUInteger limit = limitArgument != nil ? limitArgument.unsignedIntegerValue : 500;
+  result([[self createBackgroundTrackingHandler] drainPositionsWithLimit:limit]);
 }
 
 - (void)onCheckPermission:(FlutterResult) result {

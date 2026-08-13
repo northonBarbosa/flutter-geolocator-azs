@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:geolocator_apple/geolocator_apple.dart';
 
@@ -11,65 +13,51 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Spike Background Tracking',
+      title: 'Background Tracking',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
       ),
-      home: const SpikeHomePage(),
+      home: const TrackingHomePage(),
     );
   }
 }
 
-class SpikeHomePage extends StatefulWidget {
-  const SpikeHomePage({super.key});
+class TrackingHomePage extends StatefulWidget {
+  const TrackingHomePage({super.key});
 
   @override
-  State<SpikeHomePage> createState() => _SpikeHomePageState();
+  State<TrackingHomePage> createState() => _TrackingHomePageState();
 }
 
-class _SpikeHomePageState extends State<SpikeHomePage> {
-  bool _wasLaunchedByLocation = false;
-  List<Map<String, dynamic>> _events = const [];
+class _TrackingHomePageState extends State<TrackingHomePage> {
+  bool _isActive = false;
+  List<BufferedPosition> _positions = const [];
   String? _lastError;
+  StreamSubscription<int>? _bufferSubscription;
 
   @override
   void initState() {
     super.initState();
+    _bufferSubscription = GeolocatorApple().getBufferUpdateStream().listen(
+      (_) => _refresh(),
+    );
     _refresh();
   }
 
+  @override
+  void dispose() {
+    _bufferSubscription?.cancel();
+    super.dispose();
+  }
+
   Future<void> _refresh() async {
-    final wasLaunchedByLocation =
-        await GeolocatorApple.spikeWasLaunchedByLocation();
-    final events = await GeolocatorApple.spikeGetLoggedEvents();
+    final isActive = await GeolocatorApple().isBackgroundTrackingActive();
+    final positions = await GeolocatorApple().drainBufferedPositions();
+    if (!mounted) return;
     setState(() {
-      _wasLaunchedByLocation = wasLaunchedByLocation;
-      _events = events.reversed.toList();
+      _isActive = isActive;
+      _positions = positions;
     });
-  }
-
-  Future<void> _start() async {
-    setState(() => _lastError = null);
-    try {
-      await GeolocatorApple.spikeStartBackgroundTracking();
-    } catch (e) {
-      setState(() => _lastError = '$e');
-    }
-    await _refresh();
-  }
-
-  Future<void> _stop() async {
-    await GeolocatorApple.spikeStopBackgroundTracking();
-    await _refresh();
-  }
-
-  Future<void> _clear() async {
-    await GeolocatorApple.spikeClearLog();
-    await _refresh();
-  }
-
-  Future<void> _openAppSettings() async {
-    await GeolocatorApple().openAppSettings();
   }
 
   Future<void> _requestPermission() async {
@@ -92,10 +80,46 @@ class _SpikeHomePageState extends State<SpikeHomePage> {
     }
   }
 
+  Future<void> _openAppSettings() async {
+    await GeolocatorApple().openAppSettings();
+  }
+
+  Future<void> _startTracking() async {
+    setState(() => _lastError = null);
+    try {
+      await GeolocatorApple().startBackgroundTracking(
+        settings: const AppleBackgroundSettings(
+          mode: BackgroundTrackingMode.hybrid,
+          minimumDistanceMeters: 10,
+        ),
+      );
+    } catch (e) {
+      setState(() => _lastError = '$e');
+    }
+    await _refresh();
+  }
+
+  Future<void> _stopTracking() async {
+    await GeolocatorApple().stopBackgroundTracking();
+    await _refresh();
+  }
+
+  Future<void> _acknowledgeAll() async {
+    final ids = _positions.map((position) => position.id).toList();
+    if (ids.isEmpty) return;
+    await GeolocatorApple().acknowledgePositions(ids);
+    await _refresh();
+  }
+
+  Future<void> _clearBuffer() async {
+    await GeolocatorApple().clearBufferedPositions();
+    await _refresh();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Spike: relaunch por SLC')),
+      appBar: AppBar(title: const Text('Background Tracking')),
       body: Column(
         children: [
           Padding(
@@ -104,9 +128,7 @@ class _SpikeHomePageState extends State<SpikeHomePage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _wasLaunchedByLocation
-                      ? 'Este processo foi relançado por evento de localização ✅'
-                      : 'Este processo NÃO foi relançado por localização',
+                  _isActive ? 'Tracking ativo ✅' : 'Tracking inativo',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 if (_lastError != null) ...[
@@ -126,24 +148,28 @@ class _SpikeHomePageState extends State<SpikeHomePage> {
                       child: const Text('Pedir permissão (Always)'),
                     ),
                     ElevatedButton(
-                      onPressed: _start,
-                      child: const Text('Iniciar spike'),
+                      onPressed: _openAppSettings,
+                      child: const Text('Ajustes (Always)'),
                     ),
                     ElevatedButton(
-                      onPressed: _stop,
+                      onPressed: _startTracking,
+                      child: const Text('Iniciar tracking'),
+                    ),
+                    ElevatedButton(
+                      onPressed: _stopTracking,
                       child: const Text('Parar'),
                     ),
                     ElevatedButton(
                       onPressed: _refresh,
-                      child: const Text('Atualizar log'),
+                      child: const Text('Atualizar'),
                     ),
                     ElevatedButton(
-                      onPressed: _clear,
-                      child: const Text('Limpar log'),
+                      onPressed: _acknowledgeAll,
+                      child: const Text('Confirmar tudo (ack)'),
                     ),
                     ElevatedButton(
-                      onPressed: _openAppSettings,
-                      child: const Text('Ajustes (Always)'),
+                      onPressed: _clearBuffer,
+                      child: const Text('Limpar buffer'),
                     ),
                   ],
                 ),
@@ -152,28 +178,21 @@ class _SpikeHomePageState extends State<SpikeHomePage> {
           ),
           const Divider(height: 1),
           Expanded(
-            child: _events.isEmpty
-                ? const Center(child: Text('Nenhum evento registrado ainda'))
+            child: _positions.isEmpty
+                ? const Center(child: Text('Buffer vazio'))
                 : ListView.builder(
-                    itemCount: _events.length,
+                    itemCount: _positions.length,
                     itemBuilder: (context, index) {
-                      final event = _events[index];
-                      final recordedAtMs = event['recordedAtMs'] as int?;
-                      final recordedAt = recordedAtMs != null
-                          ? DateTime.fromMillisecondsSinceEpoch(recordedAtMs)
-                          : null;
-                      final lat = event['latitude'];
-                      final lon = event['longitude'];
+                      final buffered = _positions[index];
                       return ListTile(
                         dense: true,
-                        title: Text('${event['source']}'),
+                        title: Text(
+                          '#${buffered.id} · ${buffered.source.name}',
+                        ),
                         subtitle: Text(
-                          [
-                            if (recordedAt != null)
-                              recordedAt.toIso8601String(),
-                            if (lat != null && lon != null) '$lat, $lon',
-                            'appState: ${event['appState']}',
-                          ].join(' · '),
+                          '${buffered.recordedAt.toIso8601String()} · '
+                          '${buffered.position.latitude}, '
+                          '${buffered.position.longitude}',
                         ),
                       );
                     },

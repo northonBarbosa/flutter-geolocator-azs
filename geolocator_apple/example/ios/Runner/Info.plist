@@ -29,9 +29,9 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Usamos sua localização para acompanhar a rota em andamento.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Precisamos da localização mesmo com o app fechado para registrar o trajeto completo (spike de validação de background).</string>
+	<string>Precisamos da localização mesmo com o app fechado para registrar o trajeto completo em background.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
-	<string>Precisamos da localização mesmo com o app fechado para registrar o trajeto completo (spike de validação de background).</string>
+	<string>Precisamos da localização mesmo com o app fechado para registrar o trajeto completo em background.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

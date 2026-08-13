@@ -20,6 +20,11 @@ class GeolocatorApple extends GeolocatorPlatform {
   static const _serviceStatusEventChannel =
       EventChannel('flutter.baseflow.com/geolocator_service_updates_apple');
 
+  /// The event channel used to receive buffered-position-count updates from
+  /// the native platform while background tracking is active.
+  static const _bufferUpdateEventChannel =
+      EventChannel('flutter.baseflow.com/geolocator_buffer_apple');
+
   /// Registers this class as the default instance of [GeolocatorPlatform].
   static void registerWith() {
     GeolocatorPlatform.instance = GeolocatorApple();
@@ -33,6 +38,7 @@ class GeolocatorApple extends GeolocatorPlatform {
 
   Stream<Position>? _positionStream;
   Stream<ServiceStatus>? _serviceStatusStream;
+  Stream<int>? _bufferUpdateStream;
 
   @override
   Future<LocationPermission> checkPermission() async {
@@ -241,43 +247,74 @@ class GeolocatorApple extends GeolocatorPlatform {
       .invokeMethod<bool>('openLocationSettings')
       .then((value) => value ?? false);
 
-  // --- Spike da Fase 0 (docs/PLANO_BACKGROUND_IOS.md) ---
-  // Passthrough direto ao method channel, fora do contrato de
-  // GeolocatorPlatform: existe só para provar relaunch por
-  // startMonitoringSignificantLocationChanges em device real. Será
-  // substituído pela API formal (startBackgroundTracking etc.) quando as
-  // Fases 1/3/4 do plano entrarem — não depender destes métodos fora do
-  // spike.
+  @override
+  Future<void> startBackgroundTracking({
+    required BackgroundTrackingSettings settings,
+  }) async {
+    try {
+      await _methodChannel.invokeMethod(
+        'startBackgroundTracking',
+        settings.toJson(),
+      );
+    } on PlatformException catch (e) {
+      throw _handlePlatformException(e);
+    }
+  }
 
-  /// Arma o monitoramento de significant location change. Requer permissão
-  /// "Always" já concedida (concedida manualmente em Ajustes por enquanto).
-  static Future<void> spikeStartBackgroundTracking() =>
-      _methodChannel.invokeMethod('startSpikeBackgroundTracking');
+  @override
+  Future<void> stopBackgroundTracking() =>
+      _methodChannel.invokeMethod('stopBackgroundTracking');
 
-  /// Desarma o monitoramento de significant location change.
-  static Future<void> spikeStopBackgroundTracking() =>
-      _methodChannel.invokeMethod('stopSpikeBackgroundTracking');
+  @override
+  Future<bool> isBackgroundTrackingActive() async =>
+      await _methodChannel.invokeMethod<bool>('isBackgroundTrackingActive') ??
+      false;
 
-  /// Eventos registrados pelo nativo (start/stop/relaunch/mudanças de
-  /// posição), mais recente por último.
-  static Future<List<Map<String, dynamic>>> spikeGetLoggedEvents() async {
-    final events =
-        await _methodChannel.invokeMethod<List<dynamic>>('getSpikeTrackingLog');
-    return (events ?? const [])
-        .cast<Map<dynamic, dynamic>>()
-        .map((event) => event.cast<String, dynamic>())
+  @override
+  Future<int> getBufferedPositionCount() async =>
+      await _methodChannel.invokeMethod<int>('getBufferedPositionCount') ?? 0;
+
+  @override
+  Future<List<BufferedPosition>> drainBufferedPositions({
+    int limit = 500,
+  }) async {
+    final positions = await _methodChannel.invokeMethod<List<dynamic>>(
+      'drainBufferedPositions',
+      <String, dynamic>{'limit': limit},
+    );
+
+    return (positions ?? const [])
+        .map((dynamic element) => BufferedPosition.fromMap(element))
         .toList();
   }
 
-  /// Limpa o log de eventos persistido no nativo.
-  static Future<void> spikeClearLog() =>
-      _methodChannel.invokeMethod('clearSpikeTrackingLog');
+  @override
+  Future<void> acknowledgePositions(List<int> ids) => _methodChannel
+      .invokeMethod('acknowledgePositions', <String, dynamic>{'ids': ids});
 
-  /// Se o processo atual foi relançado pelo iOS por causa de um evento de
-  /// localização (UIApplicationLaunchOptionsLocationKey).
-  static Future<bool> spikeWasLaunchedByLocation() async =>
-      await _methodChannel.invokeMethod<bool>('spikeWasLaunchedByLocation') ??
-      false;
+  @override
+  Future<void> clearBufferedPositions() =>
+      _methodChannel.invokeMethod('clearBufferedPositions');
+
+  @override
+  Stream<int> getBufferUpdateStream() {
+    if (_bufferUpdateStream != null) {
+      return _bufferUpdateStream!;
+    }
+
+    _bufferUpdateStream = _bufferUpdateEventChannel
+        .receiveBroadcastStream()
+        .map((dynamic element) => element as int)
+        .handleError((error) {
+      _bufferUpdateStream = null;
+      if (error is PlatformException) {
+        error = _handlePlatformException(error);
+      }
+      throw error;
+    });
+
+    return _bufferUpdateStream!;
+  }
 
   Exception _handlePlatformException(PlatformException exception) {
     switch (exception.code) {
@@ -295,6 +332,10 @@ class GeolocatorApple extends GeolocatorPlatform {
         return PermissionRequestInProgressException(exception.message);
       case 'LOCATION_UPDATE_FAILURE':
         return PositionUpdateException(exception.message);
+      case 'BACKGROUND_PERMISSION_DENIED':
+        return BackgroundPermissionDeniedException(exception.message);
+      case 'BACKGROUND_MODES_NOT_CONFIGURED':
+        return BackgroundModesNotConfiguredException(exception.message);
       default:
         return exception;
     }

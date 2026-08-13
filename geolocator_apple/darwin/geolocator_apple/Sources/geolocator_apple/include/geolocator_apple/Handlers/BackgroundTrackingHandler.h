@@ -19,6 +19,13 @@ NS_ASSUME_NONNULL_BEGIN
 typedef void (^BackgroundTrackingErrorHandler)(NSString *errorCode,
                                                 NSString *errorDescription);
 
+/// Postada sempre que uma ou mais posições são gravadas no buffer. O
+/// `userInfo` contém a contagem atual sob a chave `kBufferCountUserInfoKey`.
+/// Puramente UX (BufferStreamHandler ouve isso pra avisar o Dart em tempo
+/// real quando há engine viva) — a corretude do tracking não depende disso.
+FOUNDATION_EXPORT NSString *const GeolocatorBufferDidGrowNotification;
+FOUNDATION_EXPORT NSString *const kBufferCountUserInfoKey;
+
 @interface BackgroundTrackingHandler : NSObject <CLLocationManagerDelegate>
 
 /// Valida permissão `authorizedAlways` e `UIBackgroundModes: [location]`,
@@ -40,6 +47,20 @@ typedef void (^BackgroundTrackingErrorHandler)(NSString *errorCode,
 /// que o tracking sobrevive a um relaunch causado pelo SLC/região após o
 /// sistema ter terminado o processo.
 - (void)resumeFromPersistedStateIfNeeded;
+
+/// Número de posições atualmente no buffer. Funciona mesmo se o tracking
+/// não estiver ativo neste processo — pode haver posições deixadas por uma
+/// sessão anterior ainda não drenadas.
+- (NSUInteger)bufferedPositionCount;
+
+/// Lê até [limit] posições do buffer sem removê-las (protocolo drain→ack).
+- (NSArray<NSDictionary<NSString *, id> *> *)drainPositionsWithLimit:(NSUInteger)limit;
+
+/// Remove as posições com os `id`s informados do buffer.
+- (void)acknowledgePositionIds:(NSArray<NSNumber *> *)ids;
+
+/// Remove todas as posições do buffer.
+- (void)clearBufferedPositions;
 
 @end
 
