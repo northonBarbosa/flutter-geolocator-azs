@@ -131,6 +131,20 @@ static NSTimeInterval const kBackgroundTaskGracePeriodSeconds = 2.0;
     return;
   }
 
+#if TARGET_OS_IOS
+  // Não confia só em didChangeAuthorization: se o usuário rebaixou a
+  // permissão em Ajustes enquanto o processo estava suspenso (comum no
+  // modo `significant` puro, onde o app não fica vivo em background), o
+  // delegate pode não ter tido chance de disparar antes do relaunch. Checa
+  // no próprio momento de resumir, em vez de rearmar e só descobrir depois.
+  if ([self.permissionHandler checkPermission] != kCLAuthorizationStatusAuthorizedAlways) {
+    NSLog(@"[geolocator_apple] BackgroundTrackingHandler: permissão não é mais Always no "
+          @"relaunch, parando em vez de rearmar.");
+    [self stop];
+    return;
+  }
+#endif
+
   self.sessionId = self.trackingStateStore.sessionId;
   [self applySettingsDictionary:settings];
   self.positionStore =

@@ -6,6 +6,7 @@
 #import "./include/geolocator_apple/Handlers/PermissionHandler.h"
 #import "./include/geolocator_apple/Handlers/PositionStreamHandler.h"
 #import "./include/geolocator_apple/Handlers/SpikeBackgroundTrackingHandler.h"
+#import "./include/geolocator_apple/Handlers/BackgroundTrackingHandler.h"
 #import "./include/geolocator_apple/Utils/ActivityTypeMapper.h"
 #import "./include/geolocator_apple/Utils/AuthorizationStatusMapper.h"
 #import "./include/geolocator_apple/Utils/LocationAccuracyMapper.h"
@@ -24,6 +25,8 @@
 @property(strong, nonatomic, nonnull) PermissionHandler *permissionHandler;
 
 @property(strong, nonatomic, nonnull) SpikeBackgroundTrackingHandler *spikeBackgroundTrackingHandler;
+
+@property(strong, nonatomic, nonnull) BackgroundTrackingHandler *backgroundTrackingHandler;
 
 @end
 
@@ -52,14 +55,18 @@
 }
 
 #if TARGET_OS_IOS
-// Spike da Fase 0 (docs/PLANO_BACKGROUND_IOS.md §1.2b): sem isto o plugin
-// nunca recebe UIApplicationLaunchOptionsLocationKey e um relaunch em
-// background é inútil, o app acorda e não faz nada.
+// Sem isto (§1.2b do plano) o plugin nunca recebe
+// UIApplicationLaunchOptionsLocationKey e um relaunch em background é
+// inútil, o app acorda e não faz nada. Chamamos resumeFromPersistedStateIfNeeded
+// mesmo quando launchedByLocation é NO: o app pode ter sido reaberto
+// normalmente pelo usuário depois de ter sido morto, e o tracking também
+// precisa voltar nesse caso — a flag serve só de telemetria.
 - (BOOL)application:(UIApplication *)application
     didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
   BOOL launchedByLocation = launchOptions[UIApplicationLaunchOptionsLocationKey] != nil;
   [[self createSpikeBackgroundTrackingHandler] recordColdLaunchTriggeredByLocation:launchedByLocation];
   [[self createSpikeBackgroundTrackingHandler] resumeIfNeeded];
+  [[self createBackgroundTrackingHandler] resumeFromPersistedStateIfNeeded];
   return YES;
 }
 #endif
@@ -106,6 +113,17 @@
 
 - (void) setSpikeBackgroundTrackingHandlerOverride:(SpikeBackgroundTrackingHandler *)spikeBackgroundTrackingHandler {
   self.spikeBackgroundTrackingHandler = spikeBackgroundTrackingHandler;
+}
+
+- (BackgroundTrackingHandler *) createBackgroundTrackingHandler {
+  if (!self.backgroundTrackingHandler) {
+    self.backgroundTrackingHandler = [[BackgroundTrackingHandler alloc] init];
+  }
+  return self.backgroundTrackingHandler;
+}
+
+- (void) setBackgroundTrackingHandlerOverride:(BackgroundTrackingHandler *)backgroundTrackingHandler {
+  self.backgroundTrackingHandler = backgroundTrackingHandler;
 }
 
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
